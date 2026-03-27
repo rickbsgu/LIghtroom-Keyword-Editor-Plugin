@@ -70,17 +70,8 @@ local function updateCountForRow(context)
     local row = props.rows[rowIndex]
     if not row then return end
 
-    local count = 0
-    if type(KeywordService.countPhotosWithKeywordName) == 'function' then
-        count = KeywordService.countPhotosWithKeywordName(context.catalog, row.keyword)
-    else
-        local kw = KeywordService.findKeywordByName(context.catalog, row.keyword)
-        if kw then
-            count = KeywordService.countPhotosWithKeyword(context.catalog, kw)
-        end
-    end
-
-    row.count = tostring(count or 0)
+    local count = KeywordService.countPhotosWithKeywordName(context.catalog, row.keyword)
+    row.count = tostring(count)
     props.rows = props.rows
     trace(context, string.format('updateCountForRow: %s -> %s', tostring(row.keyword), tostring(row.count)))
 end
