@@ -168,14 +168,8 @@ local function refreshSuggestions(context)
         return
     end
 
-    local idx = props.currentRow
-    if not idx or idx <= 0 then
-        clearSlots()
-        return
-    end
-
     -- Read from bound property, not context.rows (binding is the source of truth)
-    local prefix = trim(props[rowKeywordKey(idx)] or '')
+    local prefix = trim(props.pendingNewKeyword or '')
     if prefix == '' then
         clearSlots()
         return
@@ -193,6 +187,7 @@ local function refreshSuggestions(context)
     trace(context, string.format('suggestions: prefix="%s" matches=%d [%s]', prefix, #matches, table.concat(matches, ', ')))
 end
 
+--[[ REMOVE
 local function observeCurrentRowKeyword(context)
     local props = context.props
     local rowIndex = tonumber(props.currentRow) or 0
@@ -214,6 +209,7 @@ local function observeCurrentRowKeyword(context)
         refreshSuggestions(context)
     end)
 end
+]]
 
 local function applyKeywordToSelection(context, keywordName, opts)
     keywordName = trim(keywordName)
@@ -609,11 +605,6 @@ function UI.showEditor(context)
         loadRowsFromSelection(context)
         trace(context, string.format('showEditor: rows=%d currentRow=%d', context.rows and #context.rows or 0, tonumber(props.currentRow) or 0))
 
-        props:addObserver('currentRow', function()
-            observeCurrentRowKeyword(context)
-            refreshSuggestions(context)
-        end)
-
         local function buildDebugHeader()
             return '=== TRACE OUTPUT ==='
         end
@@ -621,12 +612,20 @@ function UI.showEditor(context)
         setDebugHeader(context, buildDebugHeader())
         appendDebug(context, 'debug channel active')
 
-
-        -- Keep hideCreateField in sync with showCreateField
+--[[
+    Beg Create Observers
+]]
         props:addObserver('showCreateField', function()
             props.hideCreateField = not props.showCreateField
         end)
 
+        props:addObserver('pendingNewKeyword', function()
+          refreshSuggestions(context)
+        end)
+
+--[[
+    End Create Observers
+]]
         local content = f:column {
             spacing = f:control_spacing(),
             fill_horizontal = 1,
@@ -675,29 +674,6 @@ function UI.showEditor(context)
                           width = math.floor(ROW_KEYWORD_WIDTH_PX * 1.5),
                           immediate = true,
                           focus = true,
-                          key_down = function(view, key)
-                              local props = context.props
-                              if key == 'return' or key == 'enter' then
-                                  local v = props.pendingNewKeyword or ''
-                                  if trim(v) ~= '' then
-                                      context.rows[#context.rows + 1] = {
-                                          count = '',
-                                          keyword = trim(v),
-                                          keywordRef = nil,
-                                      }
-                                      props.pendingNewKeyword = ''
-                                      props.showCreateField = false
-                                      syncRowsToProps(context)
-                                      refreshSuggestions(context)
-                                  end
-                                  return true
-                              elseif key == 'escape' then
-                                  props.pendingNewKeyword = ''
-                                  props.showCreateField = false
-                                  return true
-                              end
-                              return false
-                          end,
                       },
                       f:push_button {
                           title = 'Accept',
@@ -721,6 +697,7 @@ function UI.showEditor(context)
                         title = 'Cancel',
                         action = function()
                           local props = context.props
+                          props.pendingNewKeyword = ''
                           props.showCreateField = false                        
                         end,
                       },
