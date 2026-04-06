@@ -108,6 +108,11 @@ local function trace(context, msg)
     LogService.append(logPath, string.format('%s: %s', prefix, tostring(msg)))
 end
 
+--[[
+  Takes the rows obtained from 'loadRowsFromSelection' and creates
+  a 'props' structure from the items. The props are what are used to
+  create the view rows.
+]]
 local function syncRowsToProps(context)
     local props = context.props
     local rows = context.rows or {}
@@ -246,7 +251,6 @@ local function applyKeywordToSelection(context, keywordName, opts)
         context.props.recentVersion = (context.props.recentVersion or 0) + 1
 
         -- Reload rows from fresh catalog state (deduplicates, updates all counts).
-        context.initialRows = nil
         loadRowsFromSelection(context)
 
         -- Restore currentRow to the keyword that was just applied.
@@ -332,38 +336,29 @@ local function deleteRow(context, index)
 
         -- Reconcile rows from fresh selected-photo state after deletion.
         context.targetPhotos = context.catalog:getTargetPhotos() or context.targetPhotos
-        context.initialRows = nil
         loadRowsFromSelection(context)
         syncRowsToProps(context)
     end)
 end
 
+--[[
+  Fetches keywords from the KeywordService and creates rows containing
+    1. The keyword
+    2. The countsByName of that keyword
+    3. The LrKeyword object
+]]
 loadRowsFromSelection = function(context)
     local rows = {}
 
-    if context.initialRows and #context.initialRows > 0 then
-        for _, r in ipairs(context.initialRows) do
-            local keyword = r.keyword or r.name or ''
-            local count = r.count
-            if count == nil then count = '' end
+    local data = KeywordService.getKeywordNameUnionForPhotos(context.targetPhotos or {})
+    local countsByName = KeywordService.getCatalogKeywordCountsByName(context.catalog, data.names or {})
 
-            rows[#rows + 1] = {
-                keyword = keyword,
-                count = tostring(count),
-                keywordRef = r.keywordRef,
-            }
-        end
-    else
-        local data = KeywordService.getKeywordNameUnionForPhotos(context.targetPhotos or {})
-        local countsByName = KeywordService.getCatalogKeywordCountsByName(context.catalog, data.names or {})
-
-        for _, name in ipairs(data.names or {}) do
-            rows[#rows + 1] = {
-                keyword = name,
-                count = tostring(countsByName[name] or 0),
-                keywordRef = data.keywordByName and data.keywordByName[name],
-            }
-        end
+    for _, name in ipairs(data.names or {}) do
+        rows[#rows + 1] = {
+            keyword = name,
+            count = tostring(countsByName[name] or 0),
+            keywordRef = data.keywordByName and data.keywordByName[name],
+        }
     end
 
     context.rows = rows
@@ -371,6 +366,11 @@ loadRowsFromSelection = function(context)
     refreshSuggestions(context)
 end
 
+--[[ 
+  Build the rows view
+  This uses the 'props' structure built from the rows
+  obtained from 'syncRowsToProps'
+]]
 local function buildRowsView(f, context)
     local props = context.props
     local bind = LrView.bind
@@ -409,7 +409,6 @@ local function buildRowsView(f, context)
             },
         }
     end
-    -- Removed the create row from inside the rows container
     return f:scrolled_view {
         height = 220,
         width = DIALOG_WIDTH,
@@ -428,6 +427,9 @@ local function buildRowsView(f, context)
     }
 end
 
+--[[
+  Build the suggestions view
+]]
 local function buildSuggestionsView(f, context)
     local props = context.props
     local bind = LrView.bind
@@ -598,7 +600,6 @@ function UI.showEditor(context)
         props.showCreateField = false -- Hide edit field by default
         props.hideCreateField = true  -- Inverse of showCreateField
         props.createButtonState = 'create' -- 'create' or 'accept'
-        props.createButtonLabel = 'Create Keyword'
         -- Ensure the label is set before UI is built
         for i = 1, MAX_SUGGESTIONS do
             props[suggestionVisibleKey(i)] = false
@@ -636,84 +637,95 @@ function UI.showEditor(context)
                 fill_horizontal = 1,
                 buildRowsView(f, context),
             },
-
             -- Add the create row and button below the rows container and above Completion
-            -- Container 1: Only the 'Create Keyword' button, right-aligned
             f:view {
-                bind_to_object = context.props,
-                visible = LrView.bind('hideCreateField'),
-                fill_horizontal = 1,
-                f:row {
-                    spacing = f:control_spacing(),
-                    fill_horizontal = 1,
-                    f:spacer { fill_horizontal = 1 },
-                    f:push_button {
-                        title = 'Create Keyword',
+              place = 'overlapping',
+              -- Container 1: Only the 'Create Keyword' button, right-aligned
+              f:view {
+                  bind_to_object = context.props,
+                  visible = LrView.bind('hideCreateField'),
+                  fill_horizontal = 1,
+                  f:row {
+                      spacing = f:control_spacing(),
+                      fill_horizontal = 1,
+                      f:spacer { fill_horizontal = 1 },
+                      f:push_button {
+                          title = 'Create Keyword',
+                          action = function()
+                              local props = context.props
+                              props.showCreateField = true
+                              props.pendingNewKeyword = ''
+                          end,
+                      },
+                  },
+              },
+              -- Container 2: Edit field and 'Accept' button, right-aligned and in a row
+              f:view {
+                  bind_to_object = context.props,
+                  visible = LrView.bind('showCreateField'),
+                  fill_horizontal = 1,
+                  f:row {
+                      spacing = f:control_spacing(),
+                      fill_horizontal = 1,
+                      f:spacer { 
+                        fill_horizontal = 1
+                      },
+                      f:edit_field {
+                          value = LrView.bind('pendingNewKeyword'),
+                          width = math.floor(ROW_KEYWORD_WIDTH_PX * 1.5),
+                          immediate = true,
+                          focus = true,
+                          key_down = function(view, key)
+                              local props = context.props
+                              if key == 'return' or key == 'enter' then
+                                  local v = props.pendingNewKeyword or ''
+                                  if trim(v) ~= '' then
+                                      context.rows[#context.rows + 1] = {
+                                          count = '',
+                                          keyword = trim(v),
+                                          keywordRef = nil,
+                                      }
+                                      props.pendingNewKeyword = ''
+                                      props.showCreateField = false
+                                      syncRowsToProps(context)
+                                      refreshSuggestions(context)
+                                  end
+                                  return true
+                              elseif key == 'escape' then
+                                  props.pendingNewKeyword = ''
+                                  props.showCreateField = false
+                                  return true
+                              end
+                              return false
+                          end,
+                      },
+                      f:push_button {
+                          title = 'Accept',
+                          action = function()
+                              local props = context.props
+                              local v = props.pendingNewKeyword or ''
+                              if trim(v) ~= '' then
+                                  context.rows[#context.rows + 1] = {
+                                      count = '',
+                                      keyword = trim(v),
+                                      keywordRef = nil,
+                                  }
+                                  props.pendingNewKeyword = ''
+                                  props.showCreateField = false
+                                  syncRowsToProps(context)
+                                  refreshSuggestions(context)
+                              end
+                          end,
+                      },
+                      f:push_button {
+                        title = 'Cancel',
                         action = function()
-                            local props = context.props
-                            props.showCreateField = true
-                            props.pendingNewKeyword = ''
+                          local props = context.props
+                          props.showCreateField = false                        
                         end,
-                    },
-                },
-            },
-            -- Container 2: Edit field and 'Accept' button, right-aligned and in a row
-            f:view {
-                bind_to_object = context.props,
-                visible = LrView.bind('showCreateField'),
-                fill_horizontal = 1,
-                f:row {
-                    spacing = f:control_spacing(),
-                    fill_horizontal = 1,
-                    f:spacer { fill_horizontal = 1 },
-                    f:edit_field {
-                        value = LrView.bind('pendingNewKeyword'),
-                        width = math.floor(ROW_KEYWORD_WIDTH_PX * 1.5),
-                        immediate = true,
-                        focus = true,
-                        key_down = function(view, key)
-                            local props = context.props
-                            if key == 'return' or key == 'enter' then
-                                local v = props.pendingNewKeyword or ''
-                                if trim(v) ~= '' then
-                                    context.rows[#context.rows + 1] = {
-                                        count = '',
-                                        keyword = trim(v),
-                                        keywordRef = nil,
-                                    }
-                                    props.pendingNewKeyword = ''
-                                    props.showCreateField = false
-                                    syncRowsToProps(context)
-                                    refreshSuggestions(context)
-                                end
-                                return true
-                            elseif key == 'escape' then
-                                props.pendingNewKeyword = ''
-                                props.showCreateField = false
-                                return true
-                            end
-                            return false
-                        end,
-                    },
-                    f:push_button {
-                        title = 'Accept',
-                        action = function()
-                            local props = context.props
-                            local v = props.pendingNewKeyword or ''
-                            if trim(v) ~= '' then
-                                context.rows[#context.rows + 1] = {
-                                    count = '',
-                                    keyword = trim(v),
-                                    keywordRef = nil,
-                                }
-                                props.pendingNewKeyword = ''
-                                props.showCreateField = false
-                                syncRowsToProps(context)
-                                refreshSuggestions(context)
-                            end
-                        end,
-                    },
-                },
+                      },
+                  },
+              },
             },
 
             f:group_box {

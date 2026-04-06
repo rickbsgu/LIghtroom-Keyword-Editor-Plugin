@@ -266,7 +266,7 @@ function KeywordService.getKeywordNameUnionForPhotos(photos)
             end
         end
 
-        local children = keyword:getChildren()
+        local children = keyword:getChildren() -- if has child keywords, recurse down
         if children then
             for _, child in ipairs(children) do
                 walk(child)
