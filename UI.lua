@@ -528,6 +528,18 @@ function UI.showEditor(context)
                       },
                       f:push_button {
                           title = 'Accept',
+                          enabled = LrView.bind {
+                              key = 'pendingNewKeyword',
+                              bind_to = props,
+                              transform = function(value, fromModel)
+                                  -- value is the current content of props.pendingNewKeyword
+                                  if value and #value > 0 then
+                                      return true
+                                  else
+                                      return false
+                                  end
+                              end
+                          },
                           action = function()
                               local props = context.props
                               local v = props.pendingNewKeyword or ''
