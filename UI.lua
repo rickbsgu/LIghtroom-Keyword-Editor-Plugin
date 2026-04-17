@@ -14,7 +14,7 @@ local UI = {}
 local loadRowsFromSelection
 
 local MAX_KEYWORDS = 50
-local MAX_SUGGESTIONS = 7
+local MAX_SUGGESTIONS = 9
 local ROW_VERTICAL_GAP = 6
 local KEYWORD_LIST_BG = LrColor(0.94, 0.94, 0.94)
 local DIALOG_WIDTH = 320
@@ -27,6 +27,7 @@ local FRAME_COUNT_BG = LrColor(0.97, 0.90, 0.90)
 local FRAME_KEYWORD_BG = LrColor(0.90, 0.95, 0.98)
 local FRAME_DELETE_BG = LrColor(0.92, 0.97, 0.90)
 local UI_UPDATE_NUMBER = 14
+local SUGGESTIONS_PFX = 'suggestions_pfx_'
 
 local function trim(s)
     if not s then return '' end
@@ -44,8 +45,6 @@ end
 local function rowVisibleKey(i) return 'row_' .. tostring(i) .. '_visible' end
 local function rowCountKey(i) return 'row_' .. tostring(i) .. '_count' end
 local function rowKeywordKey(i) return 'row_' .. tostring(i) .. '_keyword' end
--- local function rowEditingKey(i) return 'row_' .. tostring(i) .. '_editing' end
-local function suggestionVisibleKey(i) return 'suggestion_' .. tostring(i) .. '_visible' end
 local function suggestionTitleKey(i) return 'suggestion_' .. tostring(i) .. '_title' end
 
 
@@ -71,38 +70,13 @@ end
 
 local function refreshSuggestions(context)
     local props = context.props
-    local rows = context.rows or {}
-
-    local function clearSlots()
-        for i = 1, MAX_SUGGESTIONS do
-            props[suggestionVisibleKey(i)] = false
-            props[suggestionTitleKey(i)] = ''
-        end
-        props.hasSuggestions = false
-        props.showSuggestions = false
-    end
-
-    if props.suggestionsDismissed then
-        clearSlots()
-        return
-    end
-
-    -- Read from bound property, not context.rows (binding is the source of truth)
     local prefix = trim(props.pendingNewKeyword or '')
-    if prefix == '' then
-        clearSlots()
-        return
+    local kwds = KeywordService.searchKeywordNames(prefix, context.allKeywordNames, MAX_SUGGESTIONS)
+    props.hasSuggestions = #kwds > 0
+    for ix = 1, #kwds do
+        local name = kwds[ix]
+        props[SUGGESTIONS_PFX .. ix] = name or nil
     end
-
-    local matches = KeywordService.searchKeywordNames(prefix, context.allKeywordNames, MAX_SUGGESTIONS)
-    for i = 1, MAX_SUGGESTIONS do
-        local name = matches[i]
-        props[suggestionVisibleKey(i)] = (name ~= nil)
-        props[suggestionTitleKey(i)] = name or ''
-    end
-    local hasAny = (#matches > 0)
-    props.hasSuggestions = hasAny
-    props.showSuggestions = hasAny
 end
 
 local function applyKeywordToSelection(context, keywordName, opts)
@@ -302,84 +276,7 @@ local function buildRowsView(f, context)
     }
 end
 
---[[
-  Build the suggestions view
-]]
-local function buildSuggestionsView(f, context)
-    local props = context.props
-    local bind = LrView.bind
-
-    -- Each slot is an f:view (supports visible binding) containing a
-    -- static_text (supports title binding). Both patterns are proven
-    -- in buildRowsView.
-    local slots = {}
-    for i = 1, MAX_SUGGESTIONS do
-        local capturedI = i
-        slots[#slots + 1] = f:view {
-            bind_to_object = props,
-            visible = bind(suggestionVisibleKey(i)),
-            f:static_text {
-                title = bind(suggestionTitleKey(i)),
-                mouse_down = function()
-                    props.pendingNewKeyword = props[suggestionTitleKey(capturedI)]
-                end,
-            },
-        }
-    end
-
-    return f:column {
-        spacing = f:control_spacing(),
-
-        f:view {
-            bind_to_object = props,
-            visible = bind 'showSuggestions',
-            f:column {
-                spacing = 2,
-
-                f:row {
-                    spacing = f:control_spacing(),
-                    f:static_text { title = 'Suggestions:' },
-                    f:push_button {
-                        title = 'Dismiss',
-                        action = function()
-                            props.suggestionsDismissed = true
-                            props.showSuggestions = false
-                        end,
-                    },
-                },
-
-                f:scrolled_view {
-                    width = DIALOG_WIDTH,
-                    height = 24,
-                    horizontal_scroller = true,
-                    vertical_scroller = false,
-                    f:row {
-                        spacing = f:control_spacing(),
-                        unpack(slots),
-                    },
-                },
-            },
-        },
-
-        f:view {
-            bind_to_object = props,
-            visible = bind 'suggestionsDismissed',
-            f:row {
-                spacing = f:control_spacing(),
-                f:static_text { title = 'Suggestions dismissed.' },
-                f:push_button {
-                    title = 'Show',
-                    action = function()
-                        props.suggestionsDismissed = false
-                        refreshSuggestions(context)
-                    end,
-                },
-            },
-        },
-    }
-end
-
-local function createGrid(f, context, kwItems, pfx, fc, actionFn)
+local function createGrid(f, context, pfx, fc, actionFn)
     local bind = LrView.bind
     local columnItems = { spacing = 0 }
     local kwdIX = 1
@@ -427,7 +324,29 @@ local function createGrid(f, context, kwItems, pfx, fc, actionFn)
 
     return f:column(columnItems)
 end
- 
+
+
+--[[
+  Build the suggestions view
+]]
+local function buildSuggestionsView(f, context, fc)
+    local props = context.props
+    local bind = LrView.bind
+
+    return f:view {
+      width = DIALOG_WIDTH,
+      height = 26,
+      createGrid(f, context, SUGGESTIONS_PFX, fc,
+               function(kwd)
+                 props.pendingNewKeyword = kwd
+               end
+      )
+    }
+end
+
+--[[
+  Build the Recents view
+]]
 local function buildRecentView(f, context, fc)
     local props = context.props
     local kwItems = RecentlyUsed.getNames(context.recent)
@@ -440,7 +359,7 @@ local function buildRecentView(f, context, fc)
     return f:view {
         width = DIALOG_WIDTH,
         height = 26,
-        createGrid(f, context, kwItems, pfx, fc, 
+        createGrid(f, context, pfx, fc, 
                    function(kwd) 
                       LrDialogs.message('Recent clicked, kwd: ' .. kwd)
                    end
@@ -476,7 +395,6 @@ function UI.showEditor(context)
         props.createButtonState = 'create' -- 'create' or 'accept'
         -- Ensure the label is set before UI is built
         for i = 1, MAX_SUGGESTIONS do
-            props[suggestionVisibleKey(i)] = false
             props[suggestionTitleKey(i)] = ''
         end
 
@@ -522,7 +440,7 @@ function UI.showEditor(context)
                       fill_horizontal = 1,
                       f:spacer { fill_horizontal = 1 },
                       f:push_button {
-                          title = 'Create Keyword',
+                          title = 'Add Keyword',
                           action = function()
                               local props = context.props
                               props.showCreateField = true
@@ -595,7 +513,7 @@ function UI.showEditor(context)
                 title = 'Completion',
                 width = DIALOG_WIDTH,
                 fill_horizontal = 1,
-                buildSuggestionsView(f, context),
+                buildSuggestionsView(f, context, fc),
             },
 
             f:separator { fill_horizontal = 1 },
