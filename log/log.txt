@@ -1,6 +1,0 @@
-"starting the plugin"
-"SDK Version: 15.0.1"
-"Target photos: 1"
-"Initial rows: 2"
-"showEditor: begin"
-"showEditor: loaded 500 keyword names"
