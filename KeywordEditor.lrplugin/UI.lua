@@ -431,7 +431,6 @@ function UI.showEditor(context)
                           value = LrView.bind('pendingNewKeyword'),
                           width = 172,
                           immediate = true,
-                          focus = true,
                       },
                       f:push_button {
                           title = 'Accept',

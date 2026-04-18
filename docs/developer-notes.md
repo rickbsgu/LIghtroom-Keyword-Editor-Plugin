@@ -1,5 +1,8 @@
 # Lightroom Keyword Editor Plugin - Developer Notes
 
+>  <div style="text-align:center; font-style: italic;padding: 1em;">Note: Although I'm an experienced software developer, I'm a newbie with Lua and the Lightroom SDK.  These notes represent my level of experience with the platform and may not necessarily represent best or optimal practices.</div>
+<br/>
+
 Frankly, the _Lightroom_ plugin development environent is a hostile environment.  You don't have access to a debugger, can't inspect variable values, errors often happen silently or present an error dialog with no usable information, or kill the plugin outright and you don't know where it happened or why.
 
 ## Run Lightroom from the Commandline
@@ -8,10 +11,13 @@ For me, the first line of action was to run the application from the commandline
 
 Most invaluably, it prints out a traceback if your plugin crashes.  That traceback provides much more accurate information than any popup error dialog.
 
-On MacOS:
+<u>To Launch On MacOS:</u>
 > cd to `/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app`  
 >   
 > To invoke: `./Contents/MacOS/Adobe\ Lightroom\ Classic`
+
+<u>To Launch on Windows</u>  
+(??)
 
 I run it from an extra terminal instance in _VSCode_.
 
@@ -21,15 +27,15 @@ The next debugging tool is good old dialog/alert implementations &mdash; the UI 
 
 ## Logging
 
-The _Lightroom_ SDK has a logging service.  Frankly, I don't use it because I don't like fishing through the directory structure to read it.
+The _Lightroom_ SDK has a logging service.  Frankly, I didn't use it because I don't like fishing through the directory structure to find and read it.
 
-The project has a logging service module _(LogService.lua)_ that prints to a file location of your choice.  It is currently disabled.  To enable it:
+This project has a logging service module _(LogService.lua)_ that prints to a file location of your choice.  It is currently disabled.  To enable it:
   - Create a folder to contain the logfile.  Make sure _Lightroom_ can read and write to it.
     - I created a folder _log_ in the project root and an empty file named _log.txt_ in that folder. This allows me to open it in VSCode and see changes as they happen.
   - Modify _LogService.lua_ to assign the local variable _logPath_ to that folder/filename you want to send the output.
   - Reload the plugin.
 
-**Important!**: When you're done developing and want to deploy, change the _logPath_ assignment value to _nil_, so it doesn't try to write to a file that doesn't exist on a users file system.
+<u>**Important!**</u>: When you're done developing and want to deploy, change the _logPath_ assignment value to back to _nil_, so it doesn't try to write to a file that doesn't exist on a users file system.
 
 ## Table Dumps
 

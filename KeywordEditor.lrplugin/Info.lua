@@ -1,12 +1,10 @@
 
 
 return {
-    -- Let Lightroom choose the appropriate SDK compatibility.
-    -- (Hard-pinning versions can cause load failures across builds.)
     LrSdkVersion = 15.0,
 
     LrToolkitIdentifier = 'com.gb.keywordeditor',
-    LrPluginName = 'GB Keyword Editor',
+    LrPluginName = 'LR Keyword Editor',
 
     files = {
       "Info.lua",
@@ -23,10 +21,8 @@ return {
 
     LrLibraryMenuItems = {
         {
-            title = 'Open GB Keyword Editor',
+            title = 'Open LR Keyword Editor',
             file = 'OpenKeywordEditor.lua',
         },
     },
-
-    -- LrPluginInfoProvider = 'PluginInfoProvider.lua',
 }
