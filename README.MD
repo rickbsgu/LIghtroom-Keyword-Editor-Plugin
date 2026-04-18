@@ -40,5 +40,9 @@ Typically, you use this list to click between two or three keywords that you use
 
 I'm working on _MacOS_.  I haven't tried on _Windows_.  If there's interest to make it work on _Windows_, I can address that.
 
-Install as any other _Lightroom Plugin_
+To install:
 
+- Move this folder to someplace it won't get moved or deleted (optionally, just move the _KeywordEditor.lrplugin_ folder.)
+- Open menu _File/Plug-in Manager/_ and the _Add_ button.
+- In the _Open_ dialog, navigate to the _KeywordEditor.lrplugin_ folder contained in this folder
+- Click the _Add Plug-in_ button.
